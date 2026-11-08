@@ -23,17 +23,34 @@ NTFY_RELAY_URL = os.environ.get("NTFY_RELAY_URL", "https://ntfy.sh/svt_feishu_we
 LARK_CLI = os.environ.get("LARK_CLI_BIN", "lark-cli")
 
 
+STATUS_URL = os.environ.get("NTFY_STATUS_URL", "https://ntfy.sh/svt_feishu_ws_status_cli_aa643241e7b8dce2")
+
+
+def report_status(msg):
+    print(f"[cloud_ws_bridge] {msg}", flush=True)
+    try:
+        subprocess.run(
+            ["curl", "-s", "-X", "POST", STATUS_URL, "-d", str(msg)[:1500]],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
 def setup_lark_cli_if_needed():
     secret = os.environ.get("FEISHU_APP_SECRET", "").strip()
     if not secret:
+        report_status("WARNING: FEISHU_APP_SECRET is empty!")
         return
-    print(f"[cloud_ws_bridge] configuring lark-cli profile={PROFILE} app_id={APP_ID}...", flush=True)
+    report_status(f"configuring lark-cli profile={PROFILE} app_id={APP_ID}...")
     proc = subprocess.Popen(
         [
             LARK_CLI,
             "config",
             "init",
-            "--profile",
+            "--name",
             PROFILE,
             "--app-id",
             APP_ID,
@@ -47,7 +64,7 @@ def setup_lark_cli_if_needed():
         text=True,
     )
     out, _ = proc.communicate(input=secret + "\n", timeout=15)
-    print(f"[cloud_ws_bridge] config init output: {out.strip()}", flush=True)
+    report_status(f"config init rc={proc.returncode} output: {out.strip()}")
 
 
 def build_quick_green_card(topic, form_val, act_val):
@@ -180,7 +197,7 @@ def handle_ws_event(ev):
         text=True,
         timeout=10,
     )
-    print(f"[cloud_ws_bridge] forwarded event_id={ev_id} msg_id={msg_id}", flush=True)
+    report_status(f"forwarded event_id={ev_id} msg_id={msg_id}")
 
 
 def main():
@@ -208,7 +225,7 @@ def main():
             "--timeout",
             f"{rem}s",
         ]
-        print(f"[cloud_ws_bridge] starting lark-cli WebSocket consumer (remaining={rem}s)...", flush=True)
+        report_status(f"starting lark-cli WebSocket consumer (remaining={rem}s)...")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -223,13 +240,25 @@ def main():
             if not line_s:
                 continue
             print(f"[lark-cli] {line_s}", flush=True)
-            if line_s.startswith("{"):
+            if "[event] ready" in line_s:
+                time.sleep(2)
+                bus_log_path = os.path.expanduser(f"~/.lark-cli/events/{APP_ID}/bus.log")
+                bus_txt = ""
+                if os.path.exists(bus_log_path):
+                    try:
+                        bus_txt = open(bus_log_path, "r", encoding="utf-8", errors="ignore").read()[-600:]
+                    except Exception:
+                        pass
+                report_status(f"READY: {line_s} | bus.log: {bus_txt}")
+            elif line_s.startswith("{"):
                 try:
                     ev = json.loads(line_s)
                     if ev.get("type") == "card.action.trigger" or "action_tag" in ev:
                         handle_ws_event(ev)
+                    else:
+                        report_status(f"lark-cli json: {line_s[:400]}")
                 except Exception as e:
-                    print(f"[cloud_ws_bridge] parse warning: {e}", file=sys.stderr, flush=True)
+                    report_status(f"parse warning: {e}")
         proc.wait(timeout=5)
         time.sleep(2)
 
