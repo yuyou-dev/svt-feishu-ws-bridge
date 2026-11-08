@@ -1,0 +1,33 @@
+name: SVT Feishu WebSocket Long-Connection Bridge
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */5 * * *'
+
+concurrency:
+  group: svt-feishu-ws-bridge
+  cancel-in-progress: true
+
+jobs:
+  ws-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Checkout SVT-Antigravity-Agent
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js & Install Official Feishu CLI (@larksuite/cli)
+        run: |
+          npm install -g @larksuite/cli
+          lark-cli --version
+
+      - name: Run Feishu Persistent WebSocket Bridge (card.action.trigger -> Antigravity VM)
+        env:
+          FEISHU_APP_ID: cli_aa643241e7b8dce2
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_PROFILE: jewelry_bot
+          NTFY_RELAY_URL: https://ntfy.sh/svt_feishu_webhook_cli_aa643241e7b8dce2
+          MAX_RUN_SECONDS: "19800"
+        run: |
+          python3 -u core/cloud_ws_bridge.py
