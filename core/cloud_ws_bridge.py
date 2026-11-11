@@ -68,22 +68,44 @@ def setup_lark_cli_if_needed():
 
 
 def build_quick_green_card(topic, form_val, act_val):
-    lines = []
+    items = []
     if form_val and isinstance(form_val, dict):
         for k, v in form_val.items():
             if isinstance(v, list):
                 val_s = "、".join(str(x) for x in v) if v else "（未选）"
             else:
                 val_s = str(v).strip() if v is not None and str(v).strip() != "" else "（未填）"
-            lines.append(f"• **{k}**：{val_s}")
+            items.append((str(k), val_s))
     else:
         btn_txt = (act_val or {}).get("button_text") or (act_val or {}).get("intent") or "由 AI 自由发挥"
-        lines.append(f"• **点选动作**：`{btn_txt}`")
+        items.append(("点选动作", f"`{btn_txt}`"))
 
-    summary_md = "\n".join(lines)
+    elements = [{"tag": "markdown", "content": "**已确认回传内容**"}]
+    if len(items) >= 2:
+        step = min(len(items), 4)
+        for idx in range(0, len(items), step):
+            chunk = items[idx : idx + step]
+            flex = "trisect" if len(chunk) == 3 else ("bisect" if len(chunk) == 2 else "none")
+            cols = [
+                {
+                    "tag": "column",
+                    "width": "weighted",
+                    "weight": 1,
+                    "vertical_align": "top",
+                    "background_style": "grey",
+                    "padding": "6px 10px 6px 10px",
+                    "elements": [{"tag": "markdown", "content": f"**{k}**\n{v}", "text_size": "notation"}],
+                }
+                for k, v in chunk
+            ]
+            elements.append({"tag": "column_set", "flex_mode": flex, "horizontal_spacing": "10px", "margin": "4px 0px", "columns": cols})
+    else:
+        k, v = items[0]
+        elements.append({"tag": "markdown", "content": f"• **{k}**：{v}"})
+
     return {
         "schema": "2.0",
-        "config": {"wide_screen_mode": True, "enable_forward": True},
+        "config": {"width_mode": "fill", "update_multi": True, "enable_forward": True},
         "header": {
             "title": {"tag": "plain_text", "content": f"✅ 已锁定您的选择 · {topic}"},
             "subtitle": {"tag": "plain_text", "content": "反重力珠宝匠已收到回传信息，正在为您执行…"},
@@ -92,14 +114,7 @@ def build_quick_green_card(topic, form_val, act_val):
                 {"tag": "text_tag", "text": {"tag": "plain_text", "content": "已提交"}, "color": "green"},
             ],
         },
-        "body": {
-            "elements": [
-                {
-                    "tag": "markdown",
-                    "content": f"**已确认回传内容**\n{summary_md}",
-                }
-            ]
-        },
+        "body": {"elements": elements},
     }
 
 
