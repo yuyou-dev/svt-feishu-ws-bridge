@@ -69,7 +69,8 @@ def setup_lark_cli_if_needed():
 
 def build_quick_green_card(topic, form_val, act_val):
     items = []
-    if form_val and isinstance(form_val, dict):
+    is_form = bool(form_val and isinstance(form_val, dict))
+    if is_form:
         for k, v in form_val.items():
             if isinstance(v, list):
                 val_s = "、".join(str(x) for x in v) if v else "（未选）"
@@ -80,9 +81,17 @@ def build_quick_green_card(topic, form_val, act_val):
         btn_txt = (act_val or {}).get("button_text") or (act_val or {}).get("intent") or "由 AI 自由发挥"
         items.append(("点选动作", f"`{btn_txt}`"))
 
+    origin_wm = str((act_val or {}).get("card_width_mode") or "").strip().lower()
+    if len(items) >= 3 or (origin_wm == "fill" and is_form and len(items) >= 2):
+        width_mode = "fill"
+    elif origin_wm in ("default", "compact"):
+        width_mode = origin_wm
+    else:
+        width_mode = "default"
+
     elements = [{"tag": "markdown", "content": "**已确认回传内容**"}]
     if len(items) >= 2:
-        step = min(len(items), 4)
+        step = min(len(items), 4 if width_mode == "fill" else 2)
         for idx in range(0, len(items), step):
             chunk = items[idx : idx + step]
             flex = "trisect" if len(chunk) == 3 else ("bisect" if len(chunk) == 2 else "none")
@@ -105,7 +114,7 @@ def build_quick_green_card(topic, form_val, act_val):
 
     return {
         "schema": "2.0",
-        "config": {"width_mode": "fill", "update_multi": True, "enable_forward": True},
+        "config": {"width_mode": width_mode, "update_multi": True, "enable_forward": True},
         "header": {
             "title": {"tag": "plain_text", "content": f"✅ 已锁定您的选择 · {topic}"},
             "subtitle": {"tag": "plain_text", "content": "反重力珠宝匠已收到回传信息，正在为您执行…"},
