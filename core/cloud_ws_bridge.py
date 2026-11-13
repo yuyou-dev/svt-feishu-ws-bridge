@@ -149,45 +149,68 @@ def handle_ws_event(ev):
             act_val = {"raw": ev.get("action_value")}
 
     topic = act_val.get("topic") or "互动确认"
+    preserve_card = bool(act_val.get("preserve_card"))
 
-    # 1. Update card in-place immediately (<0.3s)
-    green_card = build_quick_green_card(topic, form_val, act_val)
-    if token:
-        subprocess.run(
-            [
-                LARK_CLI,
-                "--profile",
-                PROFILE,
-                "api",
-                "POST",
-                "/open-apis/interactive/v1/card/update",
-                "--as",
-                "bot",
-                "--data",
-                json.dumps({"token": token, "card": green_card}, ensure_ascii=False),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    if msg_id:
-        subprocess.run(
-            [
-                LARK_CLI,
-                "--profile",
-                PROFILE,
-                "api",
-                "PATCH",
-                f"/open-apis/im/v1/messages/{msg_id}",
-                "--as",
-                "bot",
-                "--data",
-                json.dumps({"content": json.dumps(green_card, ensure_ascii=False)}, ensure_ascii=False),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+    # 1. Update form card in-place (<0.3s), OR preserve gallery card & attach instant Get reaction
+    if preserve_card:
+        if msg_id.startswith("om_"):
+            subprocess.run(
+                [
+                    LARK_CLI,
+                    "--profile",
+                    PROFILE,
+                    "im",
+                    "reactions",
+                    "create",
+                    "--as",
+                    "bot",
+                    "--params",
+                    json.dumps({"message_id": msg_id}, ensure_ascii=False),
+                    "--data",
+                    json.dumps({"reaction_type": {"emoji_type": "Get"}}, ensure_ascii=False),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=6,
+            )
+    else:
+        green_card = build_quick_green_card(topic, form_val, act_val)
+        if token:
+            subprocess.run(
+                [
+                    LARK_CLI,
+                    "--profile",
+                    PROFILE,
+                    "api",
+                    "POST",
+                    "/open-apis/interactive/v1/card/update",
+                    "--as",
+                    "bot",
+                    "--data",
+                    json.dumps({"token": token, "card": green_card}, ensure_ascii=False),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        if msg_id:
+            subprocess.run(
+                [
+                    LARK_CLI,
+                    "--profile",
+                    PROFILE,
+                    "api",
+                    "PATCH",
+                    f"/open-apis/im/v1/messages/{msg_id}",
+                    "--as",
+                    "bot",
+                    "--data",
+                    json.dumps({"content": json.dumps(green_card, ensure_ascii=False)}, ensure_ascii=False),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
     # 2. Forward normalized event to Antigravity VM via HTTPS PUT
     normalized = {
