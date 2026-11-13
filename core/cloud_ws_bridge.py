@@ -94,7 +94,7 @@ def build_quick_green_card(topic, form_val, act_val):
         step = min(len(items), 4 if width_mode == "fill" else 2)
         for idx in range(0, len(items), step):
             chunk = items[idx : idx + step]
-            flex = "trisect" if len(chunk) == 3 else ("bisect" if len(chunk) == 2 else "none")
+            flex = "bisect" if len(chunk) >= 2 else "none"
             cols = [
                 {
                     "tag": "column",
